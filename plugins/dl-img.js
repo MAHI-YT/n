@@ -49,7 +49,7 @@ cmd({
         if (urls.length < 2) return reply('✧ Not enough images found for an album.')
         
         const medias = urls.slice(0, 10).map(url => ({ image: { url } }))
-        const caption = `❀ Search results for: ${q}`
+        const caption = `> DARKZONE-MD RESULTS FOR: ${q}`
         
         // Send multiple images
         for (let media of medias) {
