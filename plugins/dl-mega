@@ -21,7 +21,7 @@ cmd({
 }, async (conn, mek, m, { from, q, reply }) => {
     try {
         if (!q) {
-            return reply(`❀ Please send a MEGA link to download the file.`)
+            return reply(`Please send a MEGA link to download the file.`)
         }
 
         await reply("🕒 Downloading from MEGA...")
