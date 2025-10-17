@@ -9,7 +9,7 @@ const izumi = {
 };
 
 cmd({
-    pattern: "drama",
+    pattern: "dramaa",
     alias: ["episode"],
     react: "📷",
     desc: "Download a drama episode from YouTube.",
