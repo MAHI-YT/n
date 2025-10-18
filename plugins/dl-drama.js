@@ -1,91 +1,79 @@
-const config = require('../config');
+
 const { cmd } = require('../command');
 const yts = require('yt-search');
 const axios = require('axios');
 
-// Izumi API configuration (remains the same)
-const izumi = {
-    baseURL: "https://izumiiiiiiii.dpdns.org"
-};
-
 cmd({
-    pattern: "dramaa",
-    alias: ["episode"],
-    react: "📷",
-    desc: "Download a drama episode from YouTube.",
-    category: "download",
-    use: ".drama <search query>",
+    pattern: "drama", // New command name
+    alias: ["dramadl", "serial"],
+    desc: "Download YouTube Drama episodes",
+    category: "downloader",
+    react: "🎭",
     filename: __filename
-}, async (conn, m, mek, { from, q, reply }) => {
+}, async (conn, mek, m, { from, q, reply }) => {
     try {
-        // --- 1. Input Validation ---
-        if (!q) {
-            return await reply("❌ Please provide the name of the drama and episode you want.\n\n*Example:*\n.drama Kurulus Osman episode 120");
+        if (!q) return await reply("> 📺 Please provide the name of the drama episode you want!\n\nExample: .drama Mere Humsafar Episode 10");
+
+        await reply("> *Searching for the drama... Please wait! ⏳*");
+
+        // --- 1. Search on YouTube ---
+        let url = q;
+        let videoTitle = q; // Default title
+        let thumbnailUrl = null; // To store the thumbnail URL
+
+        if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
+            const { videos } = await yts(q);
+            if (!videos || videos.length === 0) return await reply("❌ No drama or video results found!");
+            
+            // Get data from the first result
+            const firstResult = videos[0];
+            url = firstResult.url;
+            videoTitle = firstResult.title;
+            thumbnailUrl = firstResult.thumbnail;
         }
 
-        // --- 2. More Flexible YouTube Search ---
-        // IMPROVEMENT: Takes the user's entire query for a more flexible search.
-        const searchQuery = `${q} full episode`;
-        await reply(`*DARKZONE-MD ⏳ SEARCHING*  "*${q}*" `);
-
-        const searchResults = await yts(searchQuery);
-        if (!searchResults.videos || searchResults.videos.length === 0) {
-            return await reply(`❌ Sorry, I couldn't find any results for "${q}".`);
-        }
-
-        // --- 3. Smarter Video Selection ---
-        // IMPROVEMENT: Finds the first video longer than 20 minutes (1200 seconds) to ensure it's a full episode.
-        let videoResult = null;
-        for (const video of searchResults.videos) {
-            if (video.seconds > 1200) { 
-                videoResult = video;
-                break; // Stop searching once a suitable video is found
-            }
+        // --- 2. Send Initial Message (Title and Photo) ---
+        if (thumbnailUrl) {
+            await conn.sendMessage(from, {
+                image: { url: thumbnailUrl },
+                caption: `🎬 *${videoTitle}* \n\n> *Starting download for the drama episode...*`
+            }, { quoted: mek });
+        } else {
+            // Fallback if no thumbnail is available
+            await reply(`🎬 *${videoTitle}* \n\nStarting download for the drama episode...`);
         }
         
-        if (!videoResult) {
-            return await reply(`❌ Couldn't find a full-length episode for "${q}". All results were too short.`);
+        // --- 3. Call the Download API ---
+        // NOTE: Replace 'APIKEY' with your actual API key
+        const api = `https://gtech-api-xtp1.onrender.com/api/video/yt?apikey=APIKEY&url=${encodeURIComponent(url)}`;
+        const res = await axios.get(api);
+        const json = res.data;
+
+        if (!json?.status || !json?.result?.media) {
+            return await reply("❌ Download failed! Try again later. The API might be down.");
         }
 
-        const videoUrl = videoResult.url;
-        const videoTitle = videoResult.title;
-        const videoThumbnail = videoResult.thumbnail;
+        const media = json.result.media;
+        const videoUrl = media.video_url_hd !== "No HD video URL available"
+            ? media.video_url_hd
+            : media.video_url_sd !== "No SD video URL available"
+                ? media.video_url_sd
+                : null;
 
-        // --- 4. Send Thumbnail and "Downloading" Message ---
+        if (!videoUrl) return await reply("❌ No downloadable video found!");
+
+        // --- 4. Send the Video ---
         await conn.sendMessage(from, {
-            image: { url: videoThumbnail },
-            caption: `*Found:* ${videoTitle}\n\n✅ *DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...*`
+            video: { url: videoUrl },
+            caption: `✅ *DARKZONE-MD*`
         }, { quoted: mek });
 
-        // --- 5. Get Download Link from API ---
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
+        // Success reaction on the original message
+        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
 
-        const res = await axios.get(apiUrl, {
-            timeout: 90000, // Increased timeout for larger files
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            return await reply("❌ The API failed to provide a download link. Please try again later.");
-        }
-
-        const downloadUrl = res.data.result.download;
-        const finalTitle = res.data.result.title || videoTitle;
-        
-        
-
-        // --- 6. Send Drama as a Document ---
-        await conn.sendMessage(from, {
-            document: { url: downloadUrl },
-            mimetype: 'video/mp4',
-            fileName: `${finalTitle}.mp4`,
-            caption: `*${finalTitle}*\n\n> *HERE IS YOUR REQUESTED DRAMA FULL EPISODE!*`
-        }, { quoted: mek });
-
-    } catch (error) {
-        console.error('[DRAMA] Command Error:', error?.message || error);
-        await reply("❌ An error occurred while downloading the drama: " + (error?.message || 'Unknown error'));
+    } catch (e) {
+        console.error("Error in .drama:", e);
+        await reply("❌ An error occurred during the drama download. Please check the episode name or try again later!");
+        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
     }
 });
